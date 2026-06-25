@@ -1,3 +1,4 @@
+# --- .NET ---
 bin/
 obj/
 /packages/
@@ -11,3 +12,18 @@ appsettings.json
 appsettings.Development.json
 appsettings.*.json
 !appsettings.example.json
+
+# --- Node / web ---
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+build/
+.vercel/
+
+# --- misc ---
+*.log
+.DS_Store
+Thumbs.db
