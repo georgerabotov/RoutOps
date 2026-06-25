@@ -1,5 +1,9 @@
 # 02 — Architecture
 
+> ⚠️ **Superseded.** Describes an earlier Next.js / Supabase / WhatsApp design that was never built.
+> The shipped system is **.NET 10 / Coravel / Postgres / TfL** with an ops dashboard — see
+> [`00-AS-BUILT.md`](00-AS-BUILT.md).
+
 ## System diagram
 
 ```mermaid

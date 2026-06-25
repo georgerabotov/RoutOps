@@ -130,6 +130,11 @@ If no source explains a large anomaly → mark `unexplained`, still inflate buff
 
 ## 7. Back-testing, stop detection & cross-user validation
 
+> **Status: §7.2–§7.4 deferred to post-demo.** Stop detection and cross-user validation need a live
+> GPS/location signal the calendar-only build doesn't have (see §7.5 + §8). §7.1 (back-test from
+> logged outcomes) is partly realised by the Reflection loop; the GPS-dependent parts are a future
+> to-do, not in the demo.
+
 Part of the self-healing loop: continuously compare **actual vs predicted** and adjust rules at
 runtime — but only learn from *clean* journeys. A voluntary coffee stop must not inflate everyone's
 buffer.

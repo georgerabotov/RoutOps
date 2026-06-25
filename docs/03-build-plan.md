@@ -1,5 +1,8 @@
 # 03 — Build plan
 
+> ⚠️ **Superseded.** Build order for the abandoned Next.js/Supabase stack. The actual build is
+> **.NET 10** — see [`00-AS-BUILT.md`](00-AS-BUILT.md) and [`../QUICKSTART.md`](../QUICKSTART.md).
+
 Step-by-step build order. Each phase is shippable; stop wherever the clock forces you and you still have a working demo (see the never-cut path).
 
 ## Phases
