@@ -13,7 +13,8 @@ RouteOps is a self-running "day routing company" built for the **Cursor Hands-Of
 | Doc | Topic |
 | --- | --- |
 | [docs/01-concept.md](docs/01-concept.md) | Product vision, judging-criteria fit, business angle |
-| [docs/02-architecture.md](docs/02-architecture.md) | System design, core loop, deploy options |
+| [docs/00-AS-BUILT.md](docs/00-AS-BUILT.md) | **As-built architecture (authoritative) — start here** |
+| [docs/02-architecture.md](docs/02-architecture.md) | ⚠️ superseded — early Next.js/Supabase design |
 | [docs/03-build-plan.md](docs/03-build-plan.md) | Step-by-step build order, tonight timeline, cut list |
 | [docs/04-travel-modes.md](docs/04-travel-modes.md) | Travel modes, taxi buffers, leave-by formula |
 | [docs/05-baseline-anomaly.md](docs/05-baseline-anomaly.md) | Normal vs abnormal, seasonal multipliers |

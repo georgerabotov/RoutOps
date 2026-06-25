@@ -24,7 +24,6 @@ public class DemoCalendarJob(
             .ToHashSetAsync();
 
         var users = await db.Users.ToListAsync();
-        var today = DateTime.UtcNow.Date;
         int seeded = 0;
         int failures = 0;
 
@@ -34,8 +33,9 @@ public class DemoCalendarJob(
 
             try
             {
-                seeded += await DemoCalendarSeeder.EnsureDayAsync(db, user.Id, today);
-                seeded += await DemoCalendarSeeder.EnsureDayAsync(db, user.Id, today.AddDays(1));
+                var localToday = JobTime.LocalToday(user);
+                seeded += await DemoCalendarSeeder.EnsureDayAsync(db, user, localToday);
+                seeded += await DemoCalendarSeeder.EnsureDayAsync(db, user, localToday.AddDays(1));
             }
             catch (Exception ex)
             {

@@ -19,14 +19,11 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
+// Serve the build-free dashboard SPA from wwwroot (index.html as the default document).
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-// Serve the build-free dashboard SPA from wwwroot (index.html as the default document).
-app.UseDefaultFiles();
-app.UseStaticFiles();
 
 app.MapControllers();
 
@@ -43,21 +40,32 @@ app.Services.UseScheduler(scheduler =>
     scheduler.Schedule<HealthJob>().EveryFiveMinutes().PreventOverlapping(nameof(HealthJob));
 });
 
-// Best-effort schema sync on startup; the app still boots if the DB is unavailable.
+// Apply migrations + seed, retrying while Postgres comes up — `docker compose up -d` then a quick
+// `dotnet run` can race the DB healthcheck, and the old best-effort one-shot left an empty schema.
 using (var scope = app.Services.CreateScope())
 {
-    try
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    for (var attempt = 1; attempt <= 12; attempt++)
     {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Database.Migrate();
-        await TravelOptimizer.Persistence.DataInitializers.TravelSeeder.SeedAsync(db);
+        try
+        {
+            db.Database.Migrate();
+            await TravelOptimizer.Persistence.DataInitializers.TravelSeeder.SeedAsync(db);
 
-        // rehydrate the in-memory source-health state from its durable mirror
-        await scope.ServiceProvider.GetRequiredService<ISourceHealthService>().SeedFromDbAsync(CancellationToken.None);
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogWarning(ex, "Database migration on startup was skipped (DB unavailable?)");
+            // rehydrate the in-memory source-health state from its durable mirror
+            await scope.ServiceProvider.GetRequiredService<ISourceHealthService>().SeedFromDbAsync(CancellationToken.None);
+            break;
+        }
+        catch (Exception ex) when (attempt < 12)
+        {
+            app.Logger.LogWarning("Database not ready (attempt {Attempt}/12): {Message}. Retrying in 2.5s…",
+                attempt, ex.Message);
+            await Task.Delay(2500);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Database migration failed after retries; starting with no schema.");
+        }
     }
 }
 

@@ -1,5 +1,9 @@
 # 07 — Data sources
 
+> ⚠️ **Partly superseded.** The source-tier / trust ideas still inform the design, but the wiring
+> (Supabase, Wassist/WhatsApp) is not what shipped. Actual integrations: **TfL Unified API, Postgres,
+> OpenAI** — see [`00-AS-BUILT.md`](00-AS-BUILT.md).
+
 ## Source tiers
 
 | Tier | Sources | Trust action |

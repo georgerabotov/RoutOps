@@ -67,21 +67,6 @@ function modeIcon(mode) {
   return `<span class="mode-icon ${iconClass(mode)}">${ICONS[mode] || ICONS.default}</span>`;
 }
 
-const GMAP_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
-
-// "Open in Google Maps" deep link for a leg. The backend builds the URL (leg.mapsUrl); fall back to
-// composing one from the leg coordinates so the button still works on older payloads.
-function mapsLink(leg) {
-  let url = leg.mapsUrl;
-  if (!url && legHasCoords(leg)) {
-    const mode = leg.decision?.chosenMode;
-    const g = mode === "walk" ? "walking" : mode === "cycle" ? "bicycling" : "transit";
-    url = `https://www.google.com/maps/dir/?api=1&origin=${leg.fromLat},${leg.fromLng}&destination=${leg.toLat},${leg.toLng}&travelmode=${g}`;
-  }
-  if (!url) return "";
-  return `<a class="maps-link" href="${url}" target="_blank" rel="noopener" title="Open this route in Google Maps">${GMAP_ICON}<span>Google Maps</span></a>`;
-}
-
 /* ---------------- KPIs ---------------- */
 function renderKpis(o) {
   const kpis = $("#kpis");
@@ -103,6 +88,24 @@ function renderKpis(o) {
 
 function modeColor(mode, idx) {
   return MODE_COLORS[mode] || LEG_FALLBACK[idx % LEG_FALLBACK.length];
+}
+
+// Google Maps directions deep link for a leg, built from its coords (mode-aware, mixed-mode
+// waypoints from the segment boundaries). Falls back to the backend-provided mapsUrl.
+function legMapsUrl(leg) {
+  const ok = (a, b) => Number.isFinite(a) && Number.isFinite(b) && !(a === 0 && b === 0);
+  if (!ok(leg.fromLat, leg.fromLng) || !ok(leg.toLat, leg.toLng)) return leg.mapsUrl || null;
+  const origin = `${leg.fromLat},${leg.fromLng}`;
+  const dest = `${leg.toLat},${leg.toLng}`;
+  const segs = leg.decision && leg.decision.segments ? leg.decision.segments : [];
+  let wp = "";
+  if (segs.length > 1) {
+    const mids = segs.slice(0, -1).map((s) => ok(s.toLat, s.toLng) ? `${s.toLat},${s.toLng}` : null).filter(Boolean);
+    if (mids.length) wp = `&waypoints=${mids.join("|")}`;
+  }
+  const m = leg.decision ? leg.decision.chosenMode : "transit";
+  const g = m === "walk" ? "walking" : m === "cycle" ? "bicycling" : "transit";
+  return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${wp}&travelmode=${g}`;
 }
 
 function legHasCoords(leg) {
@@ -207,17 +210,43 @@ function legPopupHtml(leg, idx) {
     <div class="map-popup-row"><span>Depart</span><b>${d ? fmtTime(d.recommendedDeparture) : "—"}</b></div>
     <div class="map-popup-row"><span>Arrive</span><b>${d ? fmtTime(d.predictedArrival) : "—"}</b></div>
     <div class="map-popup-rationale">${rationale}</div>
-    ${mapsLink(leg)}
+    ${legMapsUrl(leg) ? `<a class="maps-link" href="${legMapsUrl(leg)}" target="_blank" rel="noopener">↗ Open route in Maps</a>` : ""}
   </div>`;
 }
 
+// Self-contained SVG "map" — draws the route (stops + colored lines) from leg coords. No external
+// resource, so it always renders even when map tiles can't load (offline / sandboxed preview).
+function mapPlaceholderSvg(itin) {
+  const legs = (itin.legs || []).filter((l) => Number.isFinite(l.fromLat) && Number.isFinite(l.fromLng) && Number.isFinite(l.toLat) && Number.isFinite(l.toLng));
+  if (!legs.length) return '<div class="map-fallback"><span class="mf-cap">No route coordinates to plot.</span></div>';
+  const pts = []; const pushU = (lat, lng, label) => { if (!pts.some((p) => p[0] === lat && p[1] === lng)) pts.push([lat, lng, label]); };
+  legs.forEach((l) => { pushU(l.fromLat, l.fromLng, l.fromLabel); pushU(l.toLat, l.toLng, l.toLabel); });
+  const lats = pts.map((p) => p[0]), lngs = pts.map((p) => p[1]);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const W = 820, H = 420, pad = 72;
+  const sx = (lng) => pad + (maxLng === minLng ? 0.5 : (lng - minLng) / (maxLng - minLng)) * (W - 2 * pad);
+  const sy = (lat) => pad + (maxLat === minLat ? 0.5 : (maxLat - lat) / (maxLat - minLat)) * (H - 2 * pad);
+  const esc = (s) => (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  let grid = ""; for (let i = 1; i < 10; i++) grid += `<line x1="${i * W / 10}" y1="0" x2="${i * W / 10}" y2="${H}"/>`; for (let i = 1; i < 5; i++) grid += `<line x1="0" y1="${i * H / 5}" x2="${W}" y2="${i * H / 5}"/>`;
+  const lines = legs.map((l, i) => { const c = modeColor(l.decision && l.decision.chosenMode, i); return `<line x1="${sx(l.fromLng)}" y1="${sy(l.fromLat)}" x2="${sx(l.toLng)}" y2="${sy(l.toLat)}" stroke="${c}" stroke-width="4" stroke-linecap="round" opacity="0.92"/>`; }).join("");
+  const stops = pts.map((p) => { const x = sx(p[1]), y = sy(p[0]); return `<g><circle cx="${x}" cy="${y}" r="7" fill="#0b0e14" stroke="#5b9dff" stroke-width="3"/><text x="${x + 11}" y="${y + 4}" fill="#e6ebf2" font-size="13">${esc(p[2])}</text></g>`; }).join("");
+  return `<div class="map-fallback"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" font-family="-apple-system,Segoe UI,Roboto,sans-serif"><rect width="${W}" height="${H}" fill="#0d1118"/><g stroke="#1a2130" stroke-width="1">${grid}</g><path d="M0,${H * 0.7} C ${W * 0.3},${H * 0.55} ${W * 0.55},${H * 0.9} ${W},${H * 0.6}" stroke="#16314f" stroke-width="16" fill="none" opacity="0.5"/>${lines}${stops}</svg><span class="mf-cap">🗺 schematic preview — live map tiles couldn't load here</span></div>`;
+}
+function showMapPlaceholder(itin) {
+  state.mapGaveUp = true;
+  if (state.routeMap) { try { state.routeMap.remove(); } catch (e) {} state.routeMap = null; }
+  $("#routeMap").innerHTML = mapPlaceholderSvg(itin);
+  $("#mapSub").textContent = `${(itin.legs || []).length} legs · schematic preview`;
+}
 function initRouteMap() {
   if (state.routeMap) return;
   state.routeMap = L.map("routeMap", { zoomControl: true, scrollWheelZoom: true });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
-  }).addTo(state.routeMap);
+  });
+  tiles.on("load", () => { state.tilesOk = true; });
+  tiles.addTo(state.routeMap);
   state.routeLayer = L.layerGroup().addTo(state.routeMap);
   state.routeMap.setView(LONDON, 11);
 }
@@ -233,6 +262,7 @@ function markerIcon(kind, num, color) {
 }
 
 async function renderRouteMap(itin) {
+  if (typeof L === "undefined" || state.mapGaveUp) { showMapPlaceholder(itin); return; }
   initRouteMap();
   state.routeLayer.clearLayers();
 
@@ -336,6 +366,7 @@ async function renderRouteMap(itin) {
 
   state.routeMap.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
   setTimeout(() => state.routeMap.invalidateSize(), 80);
+  setTimeout(() => { if (!state.tilesOk) showMapPlaceholder(itin); }, 3500);
 }
 
 /* ---------------- Timeline ---------------- */
@@ -355,6 +386,7 @@ function renderLeg(leg) {
   const d = leg.decision;
   const chosenMode = d ? d.chosenMode : null;
   const segs = d && d.segments ? d.segments : [];
+  const maps = legMapsUrl(leg);
 
   let segHtml = "";
   if (segs.length > 0) {
@@ -399,10 +431,7 @@ function renderLeg(leg) {
         <span class="arrow">→</span>
         <span>${leg.toLabel || "End"}</span>
       </div>
-      <div class="leg-head-right">
-        ${badge}
-        ${mapsLink(leg)}
-      </div>
+      ${badge}
     </div>
     ${segHtml}
     <div class="leg-foot">
@@ -414,6 +443,7 @@ function renderLeg(leg) {
       </div>
     </div>
     ${alts ? `<div class="alts"><div class="alts-title">Alternatives considered</div>${alts}</div>` : ""}
+    ${maps ? `<div class="leg-actions"><a class="maps-link" href="${maps}" target="_blank" rel="noopener">↗ Open route in Maps</a></div>` : ""}
   </div>`);
   return node;
 }

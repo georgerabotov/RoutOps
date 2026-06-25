@@ -1,5 +1,8 @@
 # 09 — Database schema (Supabase / Postgres)
 
+> ⚠️ **Superseded.** The shipped schema is **EF Core migrations on plain Postgres** (no Supabase) —
+> entities live in `src/TravelOptimizer.Domain/Entities`. See [`00-AS-BUILT.md`](00-AS-BUILT.md).
+
 Supabase is both the **state store** and the **message bus** between agents (rows, not Kafka). Apply these in order.
 
 ## users

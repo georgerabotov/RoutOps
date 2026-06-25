@@ -158,6 +158,10 @@ body {
 .alt-row .alt-dur { font-variant-numeric: tabular-nums; }
 .alt-row.infeasible { opacity: .5; text-decoration: line-through; }
 .tag-mixed { font-size: 10px; color: var(--warn); border: 1px solid rgba(251,191,36,.4); border-radius: 6px; padding: 1px 5px; }
+.leg-actions { margin-top: 12px; }
+.maps-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; background: var(--bg-elev);
+  border: 1px solid var(--line); color: var(--text); padding: 7px 11px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+.maps-link:hover { border-color: var(--accent); }
 
 /* ---------- Source health ---------- */
 .source-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
@@ -227,6 +231,10 @@ body {
   background: var(--bg-elev-2);
   border-radius: 0 0 var(--radius) var(--radius);
 }
+.map-fallback { position: relative; width: 100%; height: 100%; }
+.map-fallback svg { display: block; width: 100%; height: 100%; }
+.mf-cap { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: var(--text-dim);
+  background: rgba(11,14,20,.72); padding: 3px 8px; border-radius: 6px; }
 @media (min-width: 760px) { .route-map { height: 420px; } }
 
 /* Dark OSM tiles */

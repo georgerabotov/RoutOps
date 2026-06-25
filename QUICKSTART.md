@@ -20,10 +20,10 @@ matching `appsettings.example.json`.
 cd src/TravelOptimizer.Api
 cp appsettings.example.json appsettings.json
 ```
-Then set **a non-empty** `Travel:OpenAI:ApiKey` in `appsettings.json`. A placeholder
-(e.g. `"sk-demo-placeholder"`) is enough to get the app to start — with seeded coordinates
-the LLM geocoder is never called. Use a **real** OpenAI key only if you want the nightly
-Reflection loop or address geocoding to actually run.
+`Travel:OpenAI:ApiKey` can stay **blank** for the seeded demo — a blank key does **not** crash
+startup or any job, and because the seeded events carry coordinates the LLM geocoder is never
+called. Set a **real** OpenAI key only if you want the nightly Reflection loop or address
+geocoding (for non-seeded events) to actually run.
 
 > Google (`Travel:Google:*`) can stay blank for this demo — calendar sync is skipped, and we
 > seed events directly instead (step 3).
@@ -81,5 +81,6 @@ curl 'http://localhost:5252/api/adjustments?status=proposed' | jq
 ## Troubleshooting
 - `dotnet` not found / wrong version → install the **.NET 10** SDK.
 - DB connection refused → `docker compose ps` (is Postgres healthy?); check the connection string.
-- App won't start, OpenAI error → set a non-empty `Travel:OpenAI:ApiKey`.
+- Logs "Database not ready … retrying" → expected; the startup migration retries for ~30s while
+  Postgres comes up, then proceeds. Make sure `docker compose up -d` ran first.
 - Empty itinerary → confirm seeded events exist for the date you're querying and have coordinates.
