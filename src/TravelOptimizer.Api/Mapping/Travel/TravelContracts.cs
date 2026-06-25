@@ -27,6 +27,7 @@ public record ItineraryLegResponse(
     DateTime ArriveBy,
     string CorridorKey,
     DecisionResponse? Decision,
+    string MapsUrl,
     IReadOnlyList<PredictionResponse> Options);
 
 public record ItineraryResponse(

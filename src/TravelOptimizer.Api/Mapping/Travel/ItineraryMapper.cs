@@ -1,3 +1,4 @@
+using TravelOptimizer.Domain.DataHelpers;
 using TravelOptimizer.Domain.Entities.Travel;
 using TravelOptimizer.Domain.Models.Travel;
 
@@ -17,6 +18,8 @@ public static class ItineraryMapper
             l.Leg.ArriveBy,
             l.Leg.CorridorKey,
             l.Decision is null ? null : l.Decision.ToResponse(),
+            MapsLink.ForLeg(l.Leg.FromLat, l.Leg.FromLng, l.Leg.ToLat, l.Leg.ToLng,
+                l.Decision?.ChosenMode ?? TravelMode.Tube),
             l.Predictions.Select(p => p.ToResponse()).ToList())).ToList());
 
     public static DecisionResponse ToResponse(this TravelDecision d) => new(
