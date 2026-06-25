@@ -105,6 +105,9 @@
   .alt-row .alt-dur { font-variant-numeric: tabular-nums; }
   .alt-row.infeasible { opacity: .5; text-decoration: line-through; }
   .tag-mixed { font-size: 10px; color: var(--warn); border: 1px solid rgba(251,191,36,.4); border-radius: 6px; padding: 1px 5px; }
+  .leg-actions { margin-top: 12px; }
+  .maps-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; background: var(--bg-elev); border: 1px solid var(--line); color: var(--text); padding: 7px 11px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+  .maps-link:hover { border-color: var(--accent); }
   .source-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
   .source-row:last-child { border-bottom: none; }
   .source-id { display: flex; align-items: center; gap: 9px; min-width: 120px; }
@@ -355,6 +358,16 @@
   function iconClass(mode) { return ["walk", "tube", "bus", "rail", "cycle", "mixed"].includes(mode) ? `m-${mode}` : "m-default"; }
   function modeIcon(mode) { return `<span class="mode-icon ${iconClass(mode)}">${ICONS[mode] || ICONS.default}</span>`; }
   function modeColor(mode, idx) { return MODE_COLORS[mode] || LEG_FALLBACK[idx % LEG_FALLBACK.length]; }
+  function legMapsUrl(leg) {
+    const ok = (a, b) => Number.isFinite(a) && Number.isFinite(b) && !(a === 0 && b === 0);
+    if (!ok(leg.fromLat, leg.fromLng) || !ok(leg.toLat, leg.toLng)) return leg.mapsUrl || null;
+    const segs = leg.decision && leg.decision.segments ? leg.decision.segments : [];
+    let wp = "";
+    if (segs.length > 1) { const mids = segs.slice(0, -1).map((s) => ok(s.toLat, s.toLng) ? `${s.toLat},${s.toLng}` : null).filter(Boolean); if (mids.length) wp = `&waypoints=${mids.join("|")}`; }
+    const m = leg.decision ? leg.decision.chosenMode : "transit";
+    const g = m === "walk" ? "walking" : m === "cycle" ? "bicycling" : "transit";
+    return `https://www.google.com/maps/dir/?api=1&origin=${leg.fromLat},${leg.fromLng}&destination=${leg.toLat},${leg.toLng}${wp}&travelmode=${g}`;
+  }
 
   function renderKpis(o) {
     const kpis = $("#kpis"); kpis.innerHTML = "";
@@ -411,13 +424,14 @@
 
   function renderLeg(leg) {
     const d = leg.decision; const chosenMode = d ? d.chosenMode : null; const segs = d && d.segments ? d.segments : [];
+    const maps = legMapsUrl(leg);
     let segHtml = "";
     if (segs.length) segHtml = `<div class="segments">` + segs.map((s, i) => { const color = modeColor(s.mode, s.order ?? i); return `${i > 0 ? `<span class="seg-conn" style="background:${color}"></span>` : ""}<div class="seg"><div class="seg-chip" style="--seg-color:${color}; border-color:${color}55"><span class="mode-icon ${iconClass(s.mode)}">${ICONS[s.mode] || ICONS.default}</span><span class="seg-mode" style="color:${color}">${s.mode}</span><span class="seg-min">${s.durationMin}m</span></div></div>`; }).join("") + `</div>`;
     else if (chosenMode) segHtml = `<div class="segments"><div class="seg"><div class="seg-chip">${modeIcon(chosenMode)}<span class="seg-mode">${chosenMode}</span></div></div></div>`;
     const chosenPred = (leg.options || []).find((p) => p.mode === chosenMode); const conf = chosenPred ? chosenPred.confidence : 0;
     const badge = d ? `<span class="chosen-badge ${d.wasExploration ? "explore" : ""}">${modeIcon(chosenMode)} ${chosenMode}${d.wasExploration ? " · explore" : ""}</span>` : `<span class="chosen-badge">no decision</span>`;
     const alts = (leg.options || []).filter((p) => p.mode !== chosenMode).sort((a, b) => (a.calibratedDurationMin + a.waitMin) - (b.calibratedDurationMin + b.waitMin)).map((p) => `<div class="alt-row ${p.feasible ? "" : "infeasible"}"><span class="alt-mode">${modeIcon(p.mode)} ${p.mode} ${p.mode === "mixed" ? '<span class="tag-mixed">composite</span>' : ""}</span><span class="alt-dur">${p.calibratedDurationMin + p.waitMin} min</span><span style="color:var(--text-faint)">·</span><span>conf ${pct(p.confidence)}</span></div>`).join("");
-    return el(`<div class="leg"><div class="leg-head"><div class="leg-route"><span>${leg.fromLabel || "Start"}</span><span class="arrow">→</span><span>${leg.toLabel || "End"}</span></div>${badge}</div>${segHtml}<div class="leg-foot"><div class="leg-times">depart <b>${d ? fmtTime(d.recommendedDeparture) : "—"}</b> · arrive <b>${d ? fmtTime(d.predictedArrival) : "—"}</b> · by ${fmtTime(leg.arriveBy)}</div><div class="conf" title="confidence"><span class="wasted">wasted <b>${d ? d.predictedWastedMin : "—"} min</b></span><div class="conf-bar"><div class="conf-fill" style="width:${Math.round(conf * 100)}%"></div></div><span class="conf-val">${pct(conf)}</span></div></div>${alts ? `<div class="alts"><div class="alts-title">Alternatives considered</div>${alts}</div>` : ""}</div>`);
+    return el(`<div class="leg"><div class="leg-head"><div class="leg-route"><span>${leg.fromLabel || "Start"}</span><span class="arrow">→</span><span>${leg.toLabel || "End"}</span></div>${badge}</div>${segHtml}<div class="leg-foot"><div class="leg-times">depart <b>${d ? fmtTime(d.recommendedDeparture) : "—"}</b> · arrive <b>${d ? fmtTime(d.predictedArrival) : "—"}</b> · by ${fmtTime(leg.arriveBy)}</div><div class="conf" title="confidence"><span class="wasted">wasted <b>${d ? d.predictedWastedMin : "—"} min</b></span><div class="conf-bar"><div class="conf-fill" style="width:${Math.round(conf * 100)}%"></div></div><span class="conf-val">${pct(conf)}</span></div></div>${alts ? `<div class="alts"><div class="alts-title">Alternatives considered</div>${alts}</div>` : ""}${maps ? `<div class="leg-actions"><a class="maps-link" href="${maps}" target="_blank" rel="noopener">↗ Open route in Maps</a></div>` : ""}</div>`);
   }
 
   function sparkline(canvas, values, color) { if (!HAS_CHART || !values || !values.length) return; new Chart(canvas, { type: "line", data: { labels: values.map((_, i) => i), datasets: [{ data: values, borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: .35, fill: false }] }, options: { responsive: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { display: false, min: 0, max: 1 } } } }); }

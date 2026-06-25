@@ -90,6 +90,24 @@ function modeColor(mode, idx) {
   return MODE_COLORS[mode] || LEG_FALLBACK[idx % LEG_FALLBACK.length];
 }
 
+// Google Maps directions deep link for a leg, built from its coords (mode-aware, mixed-mode
+// waypoints from the segment boundaries). Falls back to the backend-provided mapsUrl.
+function legMapsUrl(leg) {
+  const ok = (a, b) => Number.isFinite(a) && Number.isFinite(b) && !(a === 0 && b === 0);
+  if (!ok(leg.fromLat, leg.fromLng) || !ok(leg.toLat, leg.toLng)) return leg.mapsUrl || null;
+  const origin = `${leg.fromLat},${leg.fromLng}`;
+  const dest = `${leg.toLat},${leg.toLng}`;
+  const segs = leg.decision && leg.decision.segments ? leg.decision.segments : [];
+  let wp = "";
+  if (segs.length > 1) {
+    const mids = segs.slice(0, -1).map((s) => ok(s.toLat, s.toLng) ? `${s.toLat},${s.toLng}` : null).filter(Boolean);
+    if (mids.length) wp = `&waypoints=${mids.join("|")}`;
+  }
+  const m = leg.decision ? leg.decision.chosenMode : "transit";
+  const g = m === "walk" ? "walking" : m === "cycle" ? "bicycling" : "transit";
+  return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${wp}&travelmode=${g}`;
+}
+
 function legHasCoords(leg) {
   const ok = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
   return ok(leg.fromLat, leg.fromLng) && ok(leg.toLat, leg.toLng);
@@ -339,6 +357,7 @@ function renderLeg(leg) {
   const d = leg.decision;
   const chosenMode = d ? d.chosenMode : null;
   const segs = d && d.segments ? d.segments : [];
+  const maps = legMapsUrl(leg);
 
   let segHtml = "";
   if (segs.length > 0) {
@@ -395,6 +414,7 @@ function renderLeg(leg) {
       </div>
     </div>
     ${alts ? `<div class="alts"><div class="alts-title">Alternatives considered</div>${alts}</div>` : ""}
+    ${maps ? `<div class="leg-actions"><a class="maps-link" href="${maps}" target="_blank" rel="noopener">↗ Open route in Maps</a></div>` : ""}
   </div>`);
   return node;
 }
