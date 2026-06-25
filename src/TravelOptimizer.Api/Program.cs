@@ -18,6 +18,9 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.MapControllers();
 

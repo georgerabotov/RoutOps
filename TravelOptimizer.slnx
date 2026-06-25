@@ -3,5 +3,6 @@
     <Project Path="src/TravelOptimizer.Api/TravelOptimizer.Api.csproj" />
     <Project Path="src/TravelOptimizer.Domain/TravelOptimizer.Domain.csproj" />
     <Project Path="src/TravelOptimizer.Persistence/TravelOptimizer.Persistence.csproj" />
+    <Project Path="src/TravelOptimizer.Tests/TravelOptimizer.Tests.csproj" />
   </Folder>
 </Solution>
