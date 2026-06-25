@@ -222,6 +222,10 @@ body {
   background: var(--bg-elev-2);
   border-radius: 0 0 var(--radius) var(--radius);
 }
+.map-fallback { position: relative; width: 100%; height: 100%; }
+.map-fallback svg { display: block; width: 100%; height: 100%; }
+.mf-cap { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: var(--text-dim);
+  background: rgba(11,14,20,.72); padding: 3px 8px; border-radius: 6px; }
 @media (min-width: 760px) { .route-map { height: 420px; } }
 
 /* Dark OSM tiles */

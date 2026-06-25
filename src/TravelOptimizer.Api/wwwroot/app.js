@@ -213,13 +213,39 @@ function legPopupHtml(leg, idx) {
   </div>`;
 }
 
+// Self-contained SVG "map" — draws the route (stops + colored lines) from leg coords. No external
+// resource, so it always renders even when map tiles can't load (offline / sandboxed preview).
+function mapPlaceholderSvg(itin) {
+  const legs = (itin.legs || []).filter((l) => Number.isFinite(l.fromLat) && Number.isFinite(l.fromLng) && Number.isFinite(l.toLat) && Number.isFinite(l.toLng));
+  if (!legs.length) return '<div class="map-fallback"><span class="mf-cap">No route coordinates to plot.</span></div>';
+  const pts = []; const pushU = (lat, lng, label) => { if (!pts.some((p) => p[0] === lat && p[1] === lng)) pts.push([lat, lng, label]); };
+  legs.forEach((l) => { pushU(l.fromLat, l.fromLng, l.fromLabel); pushU(l.toLat, l.toLng, l.toLabel); });
+  const lats = pts.map((p) => p[0]), lngs = pts.map((p) => p[1]);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const W = 820, H = 420, pad = 72;
+  const sx = (lng) => pad + (maxLng === minLng ? 0.5 : (lng - minLng) / (maxLng - minLng)) * (W - 2 * pad);
+  const sy = (lat) => pad + (maxLat === minLat ? 0.5 : (maxLat - lat) / (maxLat - minLat)) * (H - 2 * pad);
+  const esc = (s) => (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  let grid = ""; for (let i = 1; i < 10; i++) grid += `<line x1="${i * W / 10}" y1="0" x2="${i * W / 10}" y2="${H}"/>`; for (let i = 1; i < 5; i++) grid += `<line x1="0" y1="${i * H / 5}" x2="${W}" y2="${i * H / 5}"/>`;
+  const lines = legs.map((l, i) => { const c = modeColor(l.decision && l.decision.chosenMode, i); return `<line x1="${sx(l.fromLng)}" y1="${sy(l.fromLat)}" x2="${sx(l.toLng)}" y2="${sy(l.toLat)}" stroke="${c}" stroke-width="4" stroke-linecap="round" opacity="0.92"/>`; }).join("");
+  const stops = pts.map((p) => { const x = sx(p[1]), y = sy(p[0]); return `<g><circle cx="${x}" cy="${y}" r="7" fill="#0b0e14" stroke="#5b9dff" stroke-width="3"/><text x="${x + 11}" y="${y + 4}" fill="#e6ebf2" font-size="13">${esc(p[2])}</text></g>`; }).join("");
+  return `<div class="map-fallback"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" font-family="-apple-system,Segoe UI,Roboto,sans-serif"><rect width="${W}" height="${H}" fill="#0d1118"/><g stroke="#1a2130" stroke-width="1">${grid}</g><path d="M0,${H * 0.7} C ${W * 0.3},${H * 0.55} ${W * 0.55},${H * 0.9} ${W},${H * 0.6}" stroke="#16314f" stroke-width="16" fill="none" opacity="0.5"/>${lines}${stops}</svg><span class="mf-cap">🗺 schematic preview — live map tiles couldn't load here</span></div>`;
+}
+function showMapPlaceholder(itin) {
+  state.mapGaveUp = true;
+  if (state.routeMap) { try { state.routeMap.remove(); } catch (e) {} state.routeMap = null; }
+  $("#routeMap").innerHTML = mapPlaceholderSvg(itin);
+  $("#mapSub").textContent = `${(itin.legs || []).length} legs · schematic preview`;
+}
 function initRouteMap() {
   if (state.routeMap) return;
   state.routeMap = L.map("routeMap", { zoomControl: true, scrollWheelZoom: true });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
-  }).addTo(state.routeMap);
+  });
+  tiles.on("load", () => { state.tilesOk = true; });
+  tiles.addTo(state.routeMap);
   state.routeLayer = L.layerGroup().addTo(state.routeMap);
   state.routeMap.setView(LONDON, 11);
 }
@@ -235,6 +261,7 @@ function markerIcon(kind, num, color) {
 }
 
 async function renderRouteMap(itin) {
+  if (typeof L === "undefined" || state.mapGaveUp) { showMapPlaceholder(itin); return; }
   initRouteMap();
   state.routeLayer.clearLayers();
 
@@ -338,6 +365,7 @@ async function renderRouteMap(itin) {
 
   state.routeMap.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
   setTimeout(() => state.routeMap.invalidateSize(), 80);
+  setTimeout(() => { if (!state.tilesOk) showMapPlaceholder(itin); }, 3500);
 }
 
 /* ---------------- Timeline ---------------- */
