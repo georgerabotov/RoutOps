@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -38,10 +38,21 @@ namespace TravelOptimizer.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(name: "FromLat", table: "PredictionSegments");
-            migrationBuilder.DropColumn(name: "FromLng", table: "PredictionSegments");
-            migrationBuilder.DropColumn(name: "ToLat", table: "PredictionSegments");
-            migrationBuilder.DropColumn(name: "ToLng", table: "PredictionSegments");
+            migrationBuilder.DropColumn(
+                name: "FromLat",
+                table: "PredictionSegments");
+
+            migrationBuilder.DropColumn(
+                name: "FromLng",
+                table: "PredictionSegments");
+
+            migrationBuilder.DropColumn(
+                name: "ToLat",
+                table: "PredictionSegments");
+
+            migrationBuilder.DropColumn(
+                name: "ToLng",
+                table: "PredictionSegments");
         }
     }
 }

@@ -67,6 +67,21 @@ function modeIcon(mode) {
   return `<span class="mode-icon ${iconClass(mode)}">${ICONS[mode] || ICONS.default}</span>`;
 }
 
+const GMAP_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+
+// "Open in Google Maps" deep link for a leg. The backend builds the URL (leg.mapsUrl); fall back to
+// composing one from the leg coordinates so the button still works on older payloads.
+function mapsLink(leg) {
+  let url = leg.mapsUrl;
+  if (!url && legHasCoords(leg)) {
+    const mode = leg.decision?.chosenMode;
+    const g = mode === "walk" ? "walking" : mode === "cycle" ? "bicycling" : "transit";
+    url = `https://www.google.com/maps/dir/?api=1&origin=${leg.fromLat},${leg.fromLng}&destination=${leg.toLat},${leg.toLng}&travelmode=${g}`;
+  }
+  if (!url) return "";
+  return `<a class="maps-link" href="${url}" target="_blank" rel="noopener" title="Open this route in Google Maps">${GMAP_ICON}<span>Google Maps</span></a>`;
+}
+
 /* ---------------- KPIs ---------------- */
 function renderKpis(o) {
   const kpis = $("#kpis");
@@ -192,6 +207,7 @@ function legPopupHtml(leg, idx) {
     <div class="map-popup-row"><span>Depart</span><b>${d ? fmtTime(d.recommendedDeparture) : "—"}</b></div>
     <div class="map-popup-row"><span>Arrive</span><b>${d ? fmtTime(d.predictedArrival) : "—"}</b></div>
     <div class="map-popup-rationale">${rationale}</div>
+    ${mapsLink(leg)}
   </div>`;
 }
 
@@ -383,7 +399,10 @@ function renderLeg(leg) {
         <span class="arrow">→</span>
         <span>${leg.toLabel || "End"}</span>
       </div>
-      ${badge}
+      <div class="leg-head-right">
+        ${badge}
+        ${mapsLink(leg)}
+      </div>
     </div>
     ${segHtml}
     <div class="leg-foot">
@@ -597,13 +616,54 @@ async function refreshAll() {
   await Promise.all([loadItinerary(), renderCorridors(), renderLearning()]);
 }
 
+// Pull fresh events from Google Calendar, then rebuild the displayed day so new events show up
+// immediately instead of waiting for the scheduled CalendarSyncJob / OptimizeDayJob.
+async function liveRefresh() {
+  const btn = $("#refreshBtn");
+  if (btn.dataset.busy === "1") return;
+  btn.dataset.busy = "1";
+  btn.classList.add("busy");
+  btn.disabled = true;
+  const label = btn.querySelector(".btn-label");
+  const original = label ? label.textContent : "";
+  if (label) label.textContent = "Syncing…";
+
+  try {
+    let synced = 0;
+    try {
+      const r = await api("/api/calendar/sync", { method: "POST" });
+      synced = r?.eventsSynced ?? 0;
+    } catch { /* no Google connection / offline — fall back to a plain refresh */ }
+
+    // Rebuild today + the day on screen so newly synced events become legs right away.
+    const days = [...new Set([state.date].filter(Boolean))];
+    await Promise.all(days.map((d) =>
+      api("/api/itineraries/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: d }),
+      }).catch(() => {})
+    ));
+
+    await refreshAll();
+    toast(synced > 0 ? `Synced ${synced} event${synced === 1 ? "" : "s"} from Google` : "Refreshed");
+  } catch (e) {
+    toast("Refresh failed: " + e.message, true);
+  } finally {
+    btn.dataset.busy = "0";
+    btn.classList.remove("busy");
+    btn.disabled = false;
+    if (label) label.textContent = original || "Refresh";
+  }
+}
+
 function scheduleAuto() {
   if (state.timer) clearInterval(state.timer);
   state.timer = setInterval(() => { loadOverview(); loadItinerary(); renderLearning(); }, REFRESH_MS);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  $("#refreshBtn").addEventListener("click", refreshAll);
+  $("#refreshBtn").addEventListener("click", liveRefresh);
   $("#datePicker").addEventListener("change", (e) => { state.date = e.target.value; loadItinerary(); });
   refreshAll();
   scheduleAuto();

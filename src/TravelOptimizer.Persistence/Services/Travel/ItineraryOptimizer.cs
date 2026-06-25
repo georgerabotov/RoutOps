@@ -276,7 +276,15 @@ public class ItineraryOptimizer(
         if (e.HasCoordinates) return (e.Lat, e.Lng);
 
         var geo = await geocoding.GeocodeAsync(e.Location, ct);
-        return geo.Found ? (geo.Lat, geo.Lng) : null;
+        if (!geo.Found) return null;
+
+        // Cache the resolved coordinates on the event so future runs skip the geocoder entirely.
+        e.Lat = geo.Lat;
+        e.Lng = geo.Lng;
+        e.HasCoordinates = true;
+        await db.SaveChangesAsync(ct);
+
+        return (geo.Lat, geo.Lng);
     }
 
     private static (DateTime fromUtc, DateTime toUtc) LocalDayWindowUtc(DateOnly date, TimeZoneInfo tz)

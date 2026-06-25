@@ -36,7 +36,13 @@ public static class RegistrationExtensions
         services.AddScoped<ICalibrationService, CalibrationService>();
         services.AddScoped<IPolicyService, PolicyService>();
         services.AddScoped<IItineraryOptimizer, ItineraryOptimizer>();
-        services.AddScoped<IGeocodingService, GeocodingService>();
+        // Geocoder gets a typed HttpClient for the keyless OpenStreetMap (Nominatim) fallback used
+        // when the LLM is unconfigured. Nominatim requires a descriptive User-Agent.
+        services.AddHttpClient<IGeocodingService, GeocodingService>(c =>
+        {
+            c.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("TravelOptimizer/1.0 (route planner demo)");
+        });
         services.AddScoped<IReflectionService, ReflectionService>();
         services.AddScoped<IAdjustmentPromoter, AdjustmentPromoter>();
         services.AddScoped<IGoogleCalendarService, GoogleCalendarService>();
@@ -72,6 +78,7 @@ public static class RegistrationExtensions
         services.AddTransient<CalibrationJob>();
         services.AddTransient<ReflectionJob>();
         services.AddTransient<CalendarSyncJob>();
+        services.AddTransient<DemoCalendarJob>();
         services.AddTransient<MonitorJob>();
         services.AddTransient<ProbeJob>();
         services.AddTransient<HealthJob>();

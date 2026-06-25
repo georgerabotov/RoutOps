@@ -33,6 +33,7 @@ app.MapControllers();
 // Hourly schedule — each job gates on the user's local hour internally (TieringJob pattern, JOBS.md)
 app.Services.UseScheduler(scheduler =>
 {
+    scheduler.Schedule<DemoCalendarJob>().EveryFifteenMinutes().PreventOverlapping(nameof(DemoCalendarJob));
     scheduler.Schedule<OptimizeDayJob>().EveryMinute().PreventOverlapping(nameof(OptimizeDayJob));
     scheduler.Schedule<CalibrationJob>().Hourly();
     scheduler.Schedule<ReflectionJob>().Hourly();
@@ -60,18 +61,37 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Build today's + tomorrow's itineraries once at boot (fire-and-forget so it doesn't block the
-// listener), then the hourly OptimizeDayJob keeps them fresh. Lets the client just GET the result.
+// Run every scheduled job once at boot (fire-and-forget so it doesn't block the listener) so the
+// dashboard is fully populated immediately instead of waiting for the first scheduled tick. Order
+// matters: seed/sync the calendar first, then optimize, then the analysis/health jobs. Each job is
+// isolated so one failure doesn't stop the rest; the scheduler keeps them fresh from here.
 app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
 {
-    try
+    // IInvocable types, in dependency order.
+    Type[] startupJobs =
+    [
+        typeof(DemoCalendarJob),   // ensure demo users have today/tomorrow events
+        typeof(CalendarSyncJob),   // pull real Google Calendar events for connected users
+        typeof(OptimizeDayJob),    // build today's + tomorrow's itineraries
+        typeof(CalibrationJob),
+        typeof(ReflectionJob),
+        typeof(MonitorJob),
+        typeof(ProbeJob),
+        typeof(HealthJob),
+    ];
+
+    foreach (var jobType in startupJobs)
     {
-        using var scope = app.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<OptimizeDayJob>().Invoke();
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogWarning(ex, "Startup itinerary optimize was skipped");
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var job = (Coravel.Invocable.IInvocable)scope.ServiceProvider.GetRequiredService(jobType);
+            await job.Invoke();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Startup run of {Job} was skipped", jobType.Name);
+        }
     }
 }));
 
