@@ -44,7 +44,10 @@ public static class TravelSeeder
     /// </summary>
     private static void SeedDemoEvents(AppDbContext db, User user)
     {
-        var today = DateTime.UtcNow.Date;
+        // Seed against the user's LOCAL day (not the UTC day) so the meetings land inside the
+        // London-day query window even late in the UK evening, and displayed times match the labels.
+        var tz = ResolveTimeZone(user.TimeZone);
+        var localToday = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date;
 
         (string Title, double Lat, double Lng, int StartH, int StartM, int EndH, int EndM)[] meetings =
         [
@@ -60,16 +63,28 @@ public static class TravelSeeder
             db.CalendarEvents.Add(new CalendarEvent
             {
                 UserId = user.Id,
-                ExternalId = $"seed-{today:yyyyMMdd}-{i++}",
+                ExternalId = $"seed-{localToday:yyyyMMdd}-{i++}",
                 Source = "seed",
                 Title = m.Title,
                 Location = m.Title,
                 Lat = m.Lat,
                 Lng = m.Lng,
                 HasCoordinates = true,
-                StartUtc = today.AddHours(m.StartH).AddMinutes(m.StartM),
-                EndUtc = today.AddHours(m.EndH).AddMinutes(m.EndM),
+                StartUtc = ToUtc(localToday, m.StartH, m.StartM, tz),
+                EndUtc = ToUtc(localToday, m.EndH, m.EndM, tz),
             });
         }
+    }
+
+    private static DateTime ToUtc(DateTime localDate, int hour, int minute, TimeZoneInfo tz)
+    {
+        var local = DateTime.SpecifyKind(localDate.AddHours(hour).AddMinutes(minute), DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(local, tz);
+    }
+
+    private static TimeZoneInfo ResolveTimeZone(string id)
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById(string.IsNullOrWhiteSpace(id) ? "Europe/London" : id); }
+        catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("Europe/London"); }
     }
 }

@@ -13,6 +13,8 @@ public class CalibrationService(AppDbContext db, ILogger<CalibrationService> log
 {
     private const double Alpha = 0.2; // EWMA smoothing
     private const double ShrinkK = 10.0; // empirical-Bayes prior strength
+    private const double RatioFloor = 0.25; // clamp band for actual/predicted — guards against
+    private const double RatioCeil = 4.0;   // a mistaken/forgotten tap poisoning the corridor model
 
     public async Task<TravelPrediction> CalibrateAsync(TravelPrediction raw, TravelLeg leg)
     {
@@ -74,7 +76,8 @@ public class CalibrationService(AppDbContext db, ILogger<CalibrationService> log
         }
 
         double actual = stored.ActualDurationMin;
-        double ratio = actual / chosen.RawDurationMin;
+        // clamp so one mistaken/forgotten tap (e.g. tapped the next day → ratio ~48) can't poison the model
+        double ratio = Math.Clamp(actual / chosen.RawDurationMin, RatioFloor, RatioCeil);
         double mapeSample = Math.Abs(actual - chosen.CalibratedDurationMin) / actual;
 
         var model = await db.CorridorModels.FirstOrDefaultAsync(m =>
@@ -98,8 +101,18 @@ public class CalibrationService(AppDbContext db, ILogger<CalibrationService> log
             db.CorridorModels.Add(model);
         }
 
-        model.CorrectionFactor = (1 - Alpha) * model.CorrectionFactor + Alpha * ratio;
-        model.Mape = (1 - Alpha) * model.Mape + Alpha * mapeSample;
+        if (model.SampleCount == 0)
+        {
+            // seed the first observation directly instead of anchoring to the 1.0 / 0.0 prior,
+            // which otherwise leaves the factor under-converged and reports a misleadingly low MAPE
+            model.CorrectionFactor = ratio;
+            model.Mape = mapeSample;
+        }
+        else
+        {
+            model.CorrectionFactor = (1 - Alpha) * model.CorrectionFactor + Alpha * ratio;
+            model.Mape = (1 - Alpha) * model.Mape + Alpha * mapeSample;
+        }
         model.SampleCount += 1;
         model.UpdatedAt = DateTime.UtcNow;
 
