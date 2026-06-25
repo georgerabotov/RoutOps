@@ -1,0 +1,27 @@
+# Postgres for the TravelOptimizer demo.
+# Matches appsettings ConnectionStrings:Default
+#   Host=localhost;Database=TravelOptimizer;Username=admin;Password=root
+#
+#   docker compose up -d        # start
+#   docker compose down         # stop (keeps data)
+#   docker compose down -v      # stop + wipe data
+services:
+  postgres:
+    image: postgres:16
+    container_name: routops-postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: TravelOptimizer
+    ports:
+      - "5432:5432"
+    volumes:
+      - routops-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d TravelOptimizer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  routops-pgdata:
