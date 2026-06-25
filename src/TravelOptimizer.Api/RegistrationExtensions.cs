@@ -36,6 +36,9 @@ public static class RegistrationExtensions
         services.AddScoped<ICalibrationService, CalibrationService>();
         services.AddScoped<IPolicyService, PolicyService>();
         services.AddScoped<IItineraryOptimizer, ItineraryOptimizer>();
+        // Singleton geocode cache so the per-minute optimizer doesn't re-hit Nominatim for the same
+        // locations (rate-limit protection).
+        services.AddSingleton<GeocodeCache>();
         // Geocoder gets a typed HttpClient for the keyless OpenStreetMap (Nominatim) fallback used
         // when the LLM is unconfigured. Nominatim requires a descriptive User-Agent.
         services.AddHttpClient<IGeocodingService, GeocodingService>(c =>

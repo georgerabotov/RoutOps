@@ -17,7 +17,7 @@ namespace TravelOptimizer.Persistence.Services.Travel;
 /// Virtual locations ("Google Meet", "Zoom", …) are treated as non-physical and reported as a miss,
 /// so the optimizer simply skips that leg instead of inventing a journey.
 /// </summary>
-public class GeocodingService(HttpClient http, IChatCompletionService llm, ILogger<GeocodingService> logger) : IGeocodingService
+public class GeocodingService(HttpClient http, IChatCompletionService llm, GeocodeCache cache, ILogger<GeocodingService> logger) : IGeocodingService
 {
     private static readonly string[] VirtualMarkers =
         ["google meet", "zoom", "teams", "meet.google", "webex", "hangout", "http://", "https://", "phone", "call "];
@@ -30,24 +30,28 @@ public class GeocodingService(HttpClient http, IChatCompletionService llm, ILogg
         if (TryParseLatLng(locationText, out var lat, out var lng))
             return new GeocodeResult(true, lat, lng, locationText, 1.0);
 
+        // Cache both hits and misses so the per-minute optimizer doesn't re-query Nominatim for the
+        // same unresolved locations and trip its rate limit.
+        if (cache.TryGet(locationText, out var cached))
+            return cached;
+
         if (IsVirtual(locationText))
         {
             logger.LogDebug("Treating '{Location}' as a virtual (non-physical) location", locationText);
-            return GeocodeResult.Miss(locationText);
+            var miss = GeocodeResult.Miss(locationText);
+            cache.Set(locationText, miss);
+            return miss;
         }
 
-        var osm = await ResolveWithNominatimAsync(locationText, ct);
-        if (osm.Found) return osm;
+        var result = await ResolveWithNominatimAsync(locationText, ct);
+        if (!result.Found)
+        {
+            try { result = await ResolveWithLlmAsync(locationText, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "LLM geocoding failed for '{Location}'", locationText); }
+        }
 
-        try
-        {
-            return await ResolveWithLlmAsync(locationText, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "LLM geocoding failed for '{Location}'", locationText);
-            return GeocodeResult.Miss(locationText);
-        }
+        cache.Set(locationText, result);
+        return result;
     }
 
     private static bool IsVirtual(string text)
@@ -100,6 +104,11 @@ public class GeocodingService(HttpClient http, IChatCompletionService llm, ILogg
     private static readonly Regex UkPostcode =
         new(@"\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // A standalone outcode ("NW4", "E14", "SW1A") with no incode — Nominatim often misses an address
+    // that ends in a partial postcode, so we strip it and/or fall back to "outcode, London, UK".
+    private static readonly Regex UkOutcode =
+        new(@"\b([A-Z]{1,2}\d[A-Z\d]?)\b(?!\s*\d[A-Z]{2})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>Ordered, de-duplicated query variants from most-specific to most-forgiving.</summary>
     internal static IEnumerable<string> QueryCandidates(string raw)
     {
@@ -128,7 +137,21 @@ public class GeocodingService(HttpClient http, IChatCompletionService llm, ILogg
                 if (dedup.Count != segs.Length) yield return string.Join(", ", dedup);
             }
 
-            // A bare UK postcode is a reliable last resort.
+            // Strip a lone partial postcode ("Hendon, London NW4, UK" → "Hendon, London, UK").
+            var hasFullPostcode = UkPostcode.IsMatch(noPrefix);
+            if (!hasFullPostcode && UkOutcode.IsMatch(noPrefix))
+            {
+                var stripped = Norm(UkOutcode.Replace(noPrefix, ""));
+                stripped = Norm(Regex.Replace(stripped, @",\s*,", ","));
+                if (stripped != noPrefix) yield return stripped;
+            }
+
+            // Locality fallback: first segment + ", London, UK" ("Hendon, …" → "Hendon, London, UK").
+            var first = noPrefix.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (!string.IsNullOrEmpty(first) && !first.Contains("london", StringComparison.OrdinalIgnoreCase))
+                yield return $"{first}, London, UK";
+
+            // A full UK postcode is a reliable last resort.
             var pc = UkPostcode.Match(raw);
             if (pc.Success) yield return $"{pc.Groups[1].Value.ToUpperInvariant()} {pc.Groups[2].Value.ToUpperInvariant()}, UK";
         }

@@ -37,7 +37,7 @@ app.Services.UseScheduler(scheduler =>
     scheduler.Schedule<OptimizeDayJob>().EveryMinute().PreventOverlapping(nameof(OptimizeDayJob));
     scheduler.Schedule<CalibrationJob>().Hourly();
     scheduler.Schedule<ReflectionJob>().Hourly();
-    scheduler.Schedule<CalendarSyncJob>().EveryThirtyMinutes();
+    scheduler.Schedule<CalendarSyncJob>().EveryMinute().PreventOverlapping(nameof(CalendarSyncJob));
     scheduler.Schedule<MonitorJob>().EveryThirtyMinutes();
     scheduler.Schedule<ProbeJob>().Cron("*/20 * * * *").PreventOverlapping(nameof(ProbeJob));
     scheduler.Schedule<HealthJob>().EveryFiveMinutes().PreventOverlapping(nameof(HealthJob));
